@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>XLAMBI — Live Vehicle Tracking</title>
+
+    <meta charset="UTF-8">
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <style>
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        h2 {
+            text-align: center;
+            margin: 10px;
+        }
+
+        #map {
+            height: 90vh;
+            width: 100%;
+        }
+
+
+        /* VEHICLE INFORMATION */
+
+        #info {
+
+            position: absolute;
+
+            top: 60px;
+            left: 10px;
+
+            z-index: 1000;
+
+            background: white;
+
+            padding: 15px;
+
+            border-radius: 8px;
+
+            box-shadow:
+                0 2px 8px rgba(0,0,0,0.3);
+
+            min-width: 280px;
+        }
+
+        #info h3 {
+            margin-top: 0;
+        }
+
+
+        /* ROUTE PLANNER */
+
+        #route-panel {
+
+            position: absolute;
+
+            top: 60px;
+            right: 10px;
+
+            z-index: 1000;
+
+            background: white;
+
+            padding: 15px;
+
+            border-radius: 8px;
+
+            box-shadow:
+                0 2px 8px rgba(0,0,0,0.3);
+
+            width: 250px;
+        }
+
+        #route-panel h3 {
+            margin-top: 0;
+        }
+
+        #route-panel label {
+
+            display: block;
+
+            margin-top: 8px;
+
+            font-size: 13px;
+        }
+
+        #route-panel input {
+
+            width: 95%;
+
+            padding: 7px;
+
+            margin-top: 3px;
+
+            box-sizing: border-box;
+        }
+
+        #route-panel button {
+
+            margin-top: 12px;
+
+            padding: 8px 14px;
+
+            cursor: pointer;
+        }
+
+
+        /* SAFETY ALERT */
+
+        #alert {
+
+            display: none;
+
+            position: absolute;
+
+            top: 60px;
+            left: 50%;
+
+            transform: translateX(-50%);
+
+            z-index: 2000;
+
+            background: red;
+
+            color: white;
+
+            padding: 12px 20px;
+
+            border-radius: 8px;
+
+            font-weight: bold;
+
+            box-shadow:
+                0 2px 8px rgba(0,0,0,0.3);
+        }
+
+
+        /* LEGEND */
+
+        #legend {
+
+            position: absolute;
+
+            bottom: 25px;
+            right: 10px;
+
+            z-index: 1000;
+
+            background: white;
+
+            padding: 10px;
+
+            border-radius: 6px;
+
+            box-shadow:
+                0 2px 8px rgba(0,0,0,0.3);
+
+            font-size: 13px;
+        }
+
+        .legend-item {
+            margin: 5px 0;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<h2>XLAMBI — Live Vehicle Tracking</h2>
+
+
+<!-- VEHICLE INFORMATION -->
+
+<div id="info">
+
+    <h3>🚚 Vehicle V001</h3>
+
+    <p>
+        <b>Status:</b>
+        <span id="status">Connecting...</span>
+    </p>
+
+    <p>
+        <b>Risk Score:</b>
+        <span id="risk">--</span>
+    </p>
+
+    <p>
+        <b>Speed:</b>
+        <span id="speed">--</span>
+    </p>
+
+    <p>
+        <b>Accuracy:</b>
+        <span id="accuracy">--</span> m
+    </p>
+
+    <p>
+        <b>Latitude:</b>
+        <span id="latitude">--</span>
+    </p>
+
+    <p>
+        <b>Longitude:</b>
+        <span id="longitude">--</span>
+    </p>
+
+    <p>
+        <b>Last Update:</b>
+        <span id="updated">--</span>
+    </p>
+
+</div>
+
+
+<!-- ROUTE PLANNER -->
+
+<div id="route-panel">
+
+    <h3>🗺️ Route Planner</h3>
+
+    <label>
+        Destination Latitude
+    </label>
+
+    <input
+        type="number"
+        id="destLat"
+        step="any"
+        placeholder="24.9000"
+    >
+
+
+    <label>
+        Destination Longitude
+    </label>
+
+    <input
+        type="number"
+        id="destLng"
+        step="any"
+        placeholder="93.9500"
+    >
+
+
+    <button onclick="calculateRoute()">
+        Find Route
+    </button>
+
+
+    <p id="routeResult">
+        Enter a destination.
+    </p>
+
+</div>
+
+
+<!-- SAFETY ALERT -->
+
+<div id="alert">
+
+    ⚠️ HIGH RISK ZONE — DRIVE CAREFULLY
+
+</div>
+
+
+<!-- MAP -->
+
+<div id="map"></div>
+
+
+<!-- LEGEND -->
+
+<div id="legend">
+
+    <div class="legend-item">
+        🔵 Vehicle
+    </div>
+
+    <div class="legend-item">
+        ─── GPS Trail
+    </div>
+
+    <div class="legend-item">
+        ━━━ Planned Route
+    </div>
+
+    <div class="legend-item">
+        🔴 High Risk Zone
+    </div>
+
+    <div class="legend-item">
+        🟠 Medium Risk Zone
+    </div>
+
+</div>
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+
+<script>
+
+
+/* =====================================================
+   MAP INITIALIZATION
+   ===================================================== */
+
+let map = L.map("map").setView(
+    [24.8170, 93.9368],
+    13
+);
+
+
+L.tileLayer(
+
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+
+    {
+        attribution:
+            "&copy; OpenStreetMap contributors"
+    }
+
+).addTo(map);
+
+
+
+/* =====================================================
+   VARIABLES
+   ===================================================== */
+
+let vehicleMarker = null;
+let riskScore = 0;
+
+let routeLine =
+    L.polyline(
+        [],
+        {
+            color: "gray",
+            weight: 4,
+            opacity: 0.7,
+            dashArray: "8, 8"
+        }
+    ).addTo(map);
+
+
+let plannedRoute = null;
+
+let destinationMarker = null;
+
+let destinationMarkers = L.layerGroup().addTo(map);
+
+let riskZones = [];
+
+let riskZoneLayers = [];
+
+
+
+/* =====================================================
+   LOAD RISK ZONES
+   ===================================================== */
+
+async function loadRiskZones() {
+
+    try {
+
+        const response =
+            await fetch("/api/risk-zones");
+
+        const data =
+            await response.json();
+
+
+        console.log(
+            "Risk zones:",
+            data
+        );
+
+
+        if (!data.success) {
+
+            console.log(
+                "Risk zone API failed"
+            );
+
+            return;
+        }
+
+
+        riskZones = data.zones;
+
+
+        /*
+         * Draw each risk zone
+         */
+
+        riskZones.forEach(zone => {
+
+
+            let color = "green";
+
+
+            if (
+                zone.risk_level === "HIGH"
+            ) {
+
+                color = "red";
+
+            }
+            else if (
+                zone.risk_level === "MEDIUM"
+            ) {
+
+                color = "orange";
+            }
+
+
+            const circle =
+                L.circle(
+
+                    [
+                        zone.latitude,
+                        zone.longitude
+                    ],
+
+                    {
+
+                        radius:
+                            zone.radius_meters,
+
+                        color:
+                            color,
+
+                        fillColor:
+                            color,
+
+                        fillOpacity:
+                            0.25,
+
+                        weight:
+                            3
+                    }
+
+                )
+                .addTo(map);
+
+
+            circle.bindPopup(
+
+                "<b>" +
+                zone.name +
+                "</b><br>" +
+
+                "Risk Level: " +
+                zone.risk_level +
+                "<br>" +
+
+                "Radius: " +
+                zone.radius_meters +
+                " meters"
+
+            );
+
+
+            riskZoneLayers.push(circle);
+
+        });
+
+
+    }
+    catch (error) {
+
+        console.error(
+            "Risk zone error:",
+            error
+        );
+    }
+}
+
+
+
+/* =====================================================
+   VEHICLE LIVE TRACKING
+   ===================================================== */
+
+async function updateVehicle() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/gps/latest"
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!data.success) {
+
+            document.getElementById(
+                "status"
+            ).innerText =
+                "Waiting for GPS...";
+
+            return;
+        }
+
+
+        const latitude =
+            data.latitude;
+
+        const longitude =
+            data.longitude;
+
+
+
+        /* =================================================
+           GPS HISTORY
+           ================================================= */
+
+        const historyResponse =
+            await fetch(
+                "/api/gps/history"
+            );
+
+
+        const historyData =
+            await historyResponse.json();
+
+
+        if (historyData.success) {
+
+            const routePoints = [];
+
+
+            for (
+                let i = 0;
+                i < historyData.locations.length;
+                i++
+            ) {
+
+                const point =
+                    historyData.locations[i];
+
+
+                if (i === 0) {
+
+                    routePoints.push([
+
+                        point.latitude,
+                        point.longitude
+
+                    ]);
+
+                    continue;
+                }
+
+
+                const previous =
+                    historyData.locations[
+                        i - 1
+                    ];
+
+
+                const distance =
+                    L.latLng(
+
+                        previous.latitude,
+                        previous.longitude
+
+                    ).distanceTo(
+
+                        L.latLng(
+
+                            point.latitude,
+                            point.longitude
+
+                        )
+                    );
+
+
+                /*
+                 * Ignore GPS jumps
+                 * larger than 500 m
+                 */
+
+                if (distance <= 500) {
+
+                    routePoints.push([
+
+                        point.latitude,
+                        point.longitude
+
+                    ]);
+                }
+            }
+
+
+            routeLine.setLatLngs(
+                routePoints
+            );
+        }
+
+
+
+        /* =================================================
+           VEHICLE INFORMATION
+           ================================================= */
+
+        document.getElementById(
+            "latitude"
+        ).innerText =
+            latitude.toFixed(6);
+
+
+        document.getElementById(
+            "longitude"
+        ).innerText =
+            longitude.toFixed(6);
+
+
+        document.getElementById(
+            "accuracy"
+        ).innerText =
+
+            data.accuracy
+                ? data.accuracy.toFixed(1)
+                : "--";
+
+
+
+        /* =================================================
+           SPEED
+           ================================================= */
+
+        let speedKmh =
+            data.speed
+                ? data.speed * 3.6
+                : 0;
+
+
+        document.getElementById(
+            "speed"
+        ).innerText =
+
+            speedKmh.toFixed(1) +
+            " km/h";
+
+
+
+        /* =================================================
+           RISK CALCULATION
+           ================================================= */
+        /* =================================================
+   AI RISK CALCULATION
+   ================================================= */
+
+let riskReason = "AI analyzing...";
+let aiData = null;
+
+try {
+
+    const aiResponse =
+        await fetch(
+            "/api/ai/predict-risk",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body: JSON.stringify({
+
+                    vehicle_id:
+                        data.vehicle_id,
+
+                    latitude:
+                        latitude,
+
+                    longitude:
+                        longitude,
+
+                    accuracy:
+                        data.accuracy,
+
+                    speed:
+                        data.speed
+
+                })
+            }
+        );
+
+
+    aiData =
+    await aiResponse.json();
+
+
+    console.log(
+        "AI Risk:",
+        aiData
+    );
+
+
+    if (aiData.success) {
+
+        riskScore =
+            aiData.ai_risk_score;
+
+
+        if (
+            aiData.inside_risk_zone
+        ) {
+
+            riskReason =
+                "⚠️ AI detected risk zone";
+
+        }
+        else {
+
+            riskReason =
+                "🧠 AI prediction";
+
+        }
+
+
+        /* =============================================
+           SHOW HIGH-RISK ALERT
+           ============================================= */
+
+        if (
+            aiData.risk_level ===
+            "HIGH"
+        ) {
+
+            document.getElementById(
+                "alert"
+            ).style.display =
+                "block";
+
+        }
+        else {
+
+            document.getElementById(
+                "alert"
+            ).style.display =
+                "none";
+        }
+
+    }
+    else {
+
+        riskReason =
+            "AI prediction unavailable"
+            ;
+        
+
+    }
+    
+
+
+}
+catch (error) {
+
+    console.error(
+        "AI risk error:",
+        error
+    );
+
+
+    riskReason =
+        "AI prediction unavailable";
+
+}
+
+
+/* =================================================
+   RISK DISPLAY
+   ================================================= */
+
+let riskText = "";
+
+
+if (riskScore >= 70) {
+
+    riskText =
+        "🔴 HIGH (" +
+        riskScore +
+        " / 100)";
+
+}
+else if (riskScore >= 40) {
+
+    riskText =
+        "🟡 MEDIUM (" +
+        riskScore +
+        " / 100)";
+
+}
+else {
+
+    riskText =
+        "🟢 LOW (" +
+        riskScore +
+        " / 100)";
+}
+
+let weatherText = "";
+let trafficText = "";
+
+// -------------------------------
+// WEATHER DISPLAY
+// -------------------------------
+
+if (aiData && aiData.weather) {
+
+    weatherText =
+        "<br>" +
+        "🌦️ Weather: " +
+        aiData.weather.temperature +
+        " °C" +
+
+        "<br>" +
+        "🌧️ Rain: " +
+        aiData.weather.rain +
+        " mm" +
+
+        "<br>" 
+        "💨 Wind: " +
+        aiData.weather.wind_speed +
+        " km/h";
+}
+
+
+// -------------------------------
+// TRAFFIC DISPLAY
+// -------------------------------
+
+if (aiData) {
+
+    let trafficLabel = "";
+
+    if (aiData.traffic_level === 2) {
+
+        trafficLabel = "🔴 High";
+
+    }
+
+    else if (aiData.traffic_level === 1) {
+
+        trafficLabel = "🟡 Medium";
+
+    }
+
+    else {
+
+        trafficLabel = "🟢 Low";
+
+    }
+
+
+    trafficText =
+        "<br>" +
+        "🚦 Traffic: " +
+        trafficLabel;
+}
+
+
+// -------------------------------
+// FINAL RISK DISPLAY
+// -------------------------------
+
+document.getElementById(
+    "risk"
+).innerHTML =
+
+    riskText +
+    " — " +
+    riskReason +
+
+    weatherText +
+
+    trafficText;
+
+
+        /* =================================================
+           STATUS
+           ================================================= */
+
+        document.getElementById(
+            "status"
+        ).innerText =
+            "🟢 Live";
+
+
+        document.getElementById(
+            "updated"
+        ).innerText =
+            new Date().toLocaleTimeString();
+
+
+
+        /* =================================================
+           VEHICLE MARKER
+           ================================================= */
+
+        if (
+            vehicleMarker === null
+        ) {
+
+            vehicleMarker =
+                L.marker(
+
+                    [
+                        latitude,
+                        longitude
+                    ]
+
+                ).addTo(map);
+
+
+            vehicleMarker.bindPopup(
+
+                "Vehicle: " +
+                data.vehicle_id
+
+            );
+
+
+            map.setView(
+
+                [
+                    latitude,
+                    longitude
+                ],
+
+                14
+            );
+
+        }
+
+        else {
+
+            vehicleMarker.setLatLng(
+
+                [
+                    latitude,
+                    longitude
+                ]
+
+            );
+
+        }
+
+
+        console.log(
+
+            "Vehicle location:",
+            latitude,
+            longitude
+
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Could not get GPS:",
+            error
+        );
+    }
+}
+
+
+
+/* =====================================================
+   ROUTE PLANNER
+   ===================================================== */
+
+/* =====================================================
+   ALTERNATIVE ROUTE PLANNER
+   ===================================================== */
+
+async function calculateRoute() {
+
+    const destinationLat =
+        parseFloat(
+            document.getElementById("destLat").value
+        );
+
+    const destinationLng =
+        parseFloat(
+            document.getElementById("destLng").value
+        );
+
+
+    if (
+        isNaN(destinationLat) ||
+        isNaN(destinationLng)
+    ) {
+
+        alert(
+            "Please enter a valid destination."
+        );
+
+        return;
+    }
+
+
+    if (vehicleMarker === null) {
+
+        alert(
+            "Waiting for vehicle GPS..."
+        );
+
+        return;
+    }
+
+
+    const vehiclePosition =
+        vehicleMarker.getLatLng();
+
+
+    const startLat =
+        vehiclePosition.lat;
+
+    const startLng =
+        vehiclePosition.lng;
+
+
+    try {
+
+        document.getElementById(
+            "routeResult"
+        ).innerHTML =
+            "Finding safest route...";
+
+
+        /* =================================================
+           ASK OSRM FOR ALTERNATIVE ROUTES
+           ================================================= */
+
+        const url =
+            "https://router.project-osrm.org/" +
+            "route/v1/driving/" +
+
+            startLng + "," + startLat +
+
+            ";" +
+
+            destinationLng + "," + destinationLat +
+
+            "?overview=full" +
+            "&geometries=geojson" +
+            "&alternatives=true";
+
+
+        const response =
+            await fetch(url);
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            data.code !== "Ok" ||
+            data.routes.length === 0
+        ) {
+
+            document.getElementById(
+                "routeResult"
+            ).innerText =
+                "No route found.";
+
+            return;
+        }
+
+
+        console.log(
+            "Routes returned by OSRM:",
+            data.routes.length
+        );
+
+
+        /* =================================================
+           REMOVE PREVIOUS ROUTE
+           ================================================= */
+
+        if (
+            plannedRoute !== null
+        ) {
+
+            map.removeLayer(
+                plannedRoute
+            );
+
+            plannedRoute = null;
+        }
+
+
+       /* Remove ALL previous destination markers */
+
+destinationMarkers.clearLayers();
+
+destinationMarker = null;
+
+
+        /* =================================================
+           CHECK RISK OF EACH ROUTE
+           ================================================= */
+
+        const routeResults = [];
+
+
+        for (
+            let i = 0;
+            i < data.routes.length;
+            i++
+        ) {
+
+            const route =
+                data.routes[i];
+
+
+            const coordinates =
+                route.geometry.coordinates;
+
+
+            const points =
+                coordinates.map(
+                    coordinate => ({
+
+                        longitude:
+                            coordinate[0],
+
+                        latitude:
+                            coordinate[1]
+
+                    })
+                );
+
+
+            const riskResponse =
+                await fetch(
+                    "/api/route/risk",
+                    {
+
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            points: points
+                        })
+                    }
+                );
+
+
+            const riskData =
+                await riskResponse.json();
+
+
+            let risk =
+                "LOW";
+
+
+            let riskCount =
+                0;
+
+
+            if (
+                riskData.success
+            ) {
+
+                risk =
+                    riskData.route_risk;
+
+                riskCount =
+                    riskData.risk_zone_count;
+            }
+
+
+            /* =================================================
+ 
+/* =================================================
+   CALCULATE ROUTE SAFETY SCORE
+   ================================================= */
+
+let safetyScore = 100;
+
+
+/* AI VEHICLE RISK */
+
+if (riskScore >= 70) {
+
+    safetyScore -= 30;
+
+}
+else if (riskScore >= 40) {
+
+    safetyScore -= 15;
+
+}
+
+
+/* ROUTE RISK */
+
+if (risk === "HIGH") {
+
+    safetyScore -= 40;
+
+}
+else if (risk === "MEDIUM") {
+
+    safetyScore -= 20;
+
+}
+
+
+/* ADDITIONAL PENALTY FOR RISK ZONES */
+
+safetyScore -=
+    riskCount * 10;
+
+
+/* KEEP SCORE BETWEEN 0 AND 100 */
+
+safetyScore =
+    Math.max(
+        0,
+        Math.min(
+            100,
+            safetyScore
+        )
+    );
+
+routeResults.push({
+
+    routeIndex:
+        i,
+
+    route:
+        route,
+
+    risk:
+        risk,
+
+    riskCount:
+        riskCount,
+
+    safetyScore:
+        safetyScore
+
+});
+
+        }
+
+
+        /* =================================================
+           RISK SCORE FOR COMPARISON
+           ================================================= */
+
+        function riskValue(risk) {
+
+            if (risk === "HIGH") {
+                return 3;
+            }
+
+            if (risk === "MEDIUM") {
+                return 2;
+            }
+
+            return 1;
+        }
+
+
+        /* =================================================
+           SELECT SAFEST ROUTE
+           ================================================= */
+
+       routeResults.sort(
+    (a, b) => {
+
+        /* Higher safety score is better */
+
+        if (
+            b.safetyScore !==
+            a.safetyScore
+        ) {
+
+            return (
+                b.safetyScore -
+                a.safetyScore
+            );
+        }
+
+
+        /* If safety is equal,
+           choose shorter route */
+
+        return (
+            a.route.distance -
+            b.route.distance
+        );
+
+    }
+);
+
+        const safest =
+            routeResults[0];
+
+
+        /* =================================================
+           DRAW ALL ROUTES
+           ================================================= */
+
+        routeResults.forEach(
+            (result, index) => {
+
+                let lineColor =
+                    "gray";
+
+
+                let lineWeight =
+                    4;
+
+
+                let lineOpacity =
+                    0.45;
+
+
+                /*
+                 * Safest route
+                 */
+
+                if (
+                    result === safest
+                ) {
+
+                    lineColor =
+                        "green";
+
+                    lineWeight =
+                        8;
+
+                    lineOpacity =
+                        0.9;
+                }
+
+
+                /*
+                 * HIGH risk route
+                 */
+
+                else if (
+                    result.risk ===
+                    "HIGH"
+                ) {
+
+                    lineColor =
+                        "red";
+
+                    lineWeight =
+                        5;
+
+                    lineOpacity =
+                        0.7;
+                }
+
+
+                /*
+                 * MEDIUM risk route
+                 */
+
+                else if (
+                    result.risk ===
+                    "MEDIUM"
+                ) {
+
+                    lineColor =
+                        "orange";
+
+                    lineWeight =
+                        5;
+
+                    lineOpacity =
+                        0.7;
+                }
+
+
+                const routeLayer =
+                    L.geoJSON(
+                        result.route.geometry,
+                        {
+
+                            style: {
+
+                                color:
+                                    lineColor,
+
+                                weight:
+                                    lineWeight,
+
+                                opacity:
+                                    lineOpacity
+                            }
+
+                        }
+                    ).addTo(map);
+
+
+                routeLayer.bindPopup(
+
+                    "<b>Route " +
+                    (result.routeIndex + 1) +
+                    "</b><br><br>" +
+
+                    "Risk: " +
+result.risk +
+
+"<br>" +
+
+"Risk zones: " +
+result.riskCount +
+
+"<br>" +
+
+"Safety Score: <b>" +
+result.safetyScore +
+" / 100</b><br>" +
+
+"Distance: " +
+                    (
+                        result.route.distance /
+                        1000
+                    ).toFixed(2) +
+                    " km"
+
+                );
+
+
+                /*
+                 * Store safest route
+                 * as plannedRoute.
+                 */
+
+                if (
+                    result === safest
+                ) {
+
+                    plannedRoute =
+                        routeLayer;
+                }
+
+            }
+        );
+
+
+        /* =================================================
+           DESTINATION MARKER
+           ================================================= */
+
+        destinationMarker =
+    L.marker(
+        [
+            destinationLat,
+            destinationLng
+        ]
+    )
+    .bindPopup(
+        "🎯 Destination"
+    );
+
+destinationMarkers.addLayer(
+    destinationMarker
+);
+
+
+        /* =================================================
+           FIT MAP
+           ================================================= */
+
+        map.fitBounds(
+            plannedRoute.getBounds(),
+            {
+                padding: [
+                    50,
+                    50
+                ]
+            }
+        );
+
+
+        /* =================================================
+           DISPLAY RESULTS
+           ================================================= */
+
+        let resultHTML =
+            "<b>🛣️ Route Analysis</b><br><br>";
+
+
+        routeResults.forEach(
+            (result, index) => {
+
+                const distanceKm =
+                    result.route.distance /
+                    1000;
+
+
+                const timeMin =
+                    result.route.duration /
+                    60;
+
+
+                const isSafest =
+                    result === safest;
+
+
+                resultHTML +=
+
+    "<b>" +
+
+    (isSafest
+        ? "🟢 Recommended Route"
+        : "Route " +
+          (result.routeIndex + 1)
+    ) +
+
+    "</b><br>" +
+
+    "Risk: " +
+    result.risk +
+
+    "<br>" +
+
+    "Risk zones: " +
+    result.riskCount +
+
+    "<br>" +
+
+    "Safety Score: <b>" +
+    result.safetyScore +
+    " / 100</b>" +
+
+    "<br>" +
+
+    "Distance: " +
+    distanceKm.toFixed(2) +
+    " km<br>" +
+
+    "Time: " +
+    timeMin.toFixed(0) +
+    " min<br><br>";
+
+            }
+        );
+
+
+        resultHTML +=
+            "<b>✅ Recommended:</b> " +
+            "Route " +
+            (safest.routeIndex + 1);
+
+
+        document.getElementById(
+            "routeResult"
+        ).innerHTML =
+            resultHTML;
+
+
+        console.log(
+            "Route analysis:",
+            routeResults
+        );
+
+    }
+
+
+    catch (error) {
+
+    console.error(
+        "Route error:",
+        error
+    );
+
+    document.getElementById(
+        "routeResult"
+    ).innerText =
+        "Route Error: " + error.message;
+
+}
+
+}
+
+
+
+/* =====================================================
+   START APPLICATION
+   ===================================================== */
+
+
+/*
+ * Load risk zones first.
+ */
+
+loadRiskZones();
+
+
+/*
+ * Start vehicle tracking.
+ */
+
+updateVehicle();
+
+
+/*
+ * Update vehicle every 2 seconds.
+ */
+
+setInterval(
+
+    updateVehicle,
+
+    2000
+
+);
+
+
+</script>
+
+</body>
+
+</html>

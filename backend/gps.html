@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>XLAMBI GPS</title>
+</head>
+
+<body>
+
+    <h1>XLAMBI GPS Tracker</h1>
+
+    <button onclick="startGPS()">
+        Start GPS
+    </button>
+
+    <h2>GPS Information</h2>
+
+    <p id="status">Waiting...</p>
+    <p id="latitude">Latitude: --</p>
+    <p id="longitude">Longitude: --</p>
+    <p id="accuracy">Accuracy: --</p>
+
+<script>
+
+function startGPS() {
+
+    if (!navigator.geolocation) {
+        document.getElementById("status").innerText =
+            "GPS is not supported by this browser.";
+        return;
+    }
+
+    document.getElementById("status").innerText =
+        "Getting GPS location...";
+
+    navigator.geolocation.watchPosition(
+
+        async function(position) {
+
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+            const speed = position.coords.speed || 0;
+
+            document.getElementById("latitude").innerText =
+                "Latitude: " + latitude;
+
+            document.getElementById("longitude").innerText =
+                "Longitude: " + longitude;
+
+            document.getElementById("accuracy").innerText =
+                "Accuracy: " + accuracy + " meters";
+
+            document.getElementById("status").innerText =
+                "GPS active";
+
+            const gpsData = {
+
+                vehicle_id: "V001",
+
+                latitude: latitude,
+
+                longitude: longitude,
+
+                accuracy: accuracy,
+
+                speed: speed
+            };
+
+            try {
+
+                const response = await fetch(
+                    "/api/gps/update",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+
+                        body: JSON.stringify(gpsData)
+                    }
+                );
+
+                const result = await response.json();
+
+                console.log(result);
+
+            } catch (error) {
+
+                console.error(
+                    "Could not send GPS:",
+                    error
+                );
+
+            }
+
+        },
+
+        function(error) {
+
+            document.getElementById("status").innerText =
+                "GPS Error: " + error.message;
+
+        },
+
+        {
+            enableHighAccuracy: true,
+            maximumAge: 5000,
+            timeout: 10000
+        }
+    );
+}
+
+</script>
+
+</body>
+</html>
